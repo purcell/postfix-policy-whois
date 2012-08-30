@@ -1,0 +1,66 @@
+#!/usr/bin/env ruby
+
+$0='postfix-policy-registrar'
+
+require 'net/dns'
+require 'whois'
+
+def nameserver_for(domain)
+  if answer = Net::DNS::Resolver.start(domain, Net::DNS::NS).answer.first
+    answer.nsdname.sub(/\.$/, '')
+  end
+end
+
+def dodgy_dns?(domain)
+  if ns = nameserver_for(domain)
+    return domain if ns[".monikerdns.net"]
+  else
+    parent_domain = domain.scan(/\.(.*)/).flatten.first
+    if parent_domain && parent_domain =~ /\./
+      return dodgy_dns?(parent_domain)
+    end
+  end
+end
+
+def dodgy_whois?(domain)
+  ## TODO: throttle requests
+  return Whois.whois(domain).match?(/monikerprivacy/)
+end
+
+def dodgy?(domain)
+  puts "Checking domain: #{domain}"
+  if parent_domain = dodgy_dns?(domain)
+    puts "-> suspicious nameservers"
+    dodgy = dodgy_whois?(parent_domain)
+    puts "-> private registration" if dodgy
+    dodgy
+  end
+end
+
+require 'socket'
+server = TCPServer.new("0.0.0.0", 8787)
+puts "Listening on 0.0.0.0:8787"
+
+while true
+  Thread.new(server.accept) do |client|
+    attr = Hash.new
+    while rp = client.gets
+      break if rp == "\n"
+      rp2 = rp.split(/=/)
+      attr[rp2[0]] = rp2[1].chomp
+    end
+
+    sender = attr["sender"]
+    dodgy = sender && dodgy?(sender.scan(/@(.*)/).flatten.first.downcase)
+
+    if dodgy
+      puts "Rejecting mail due to registrar: #{sender}"
+    end
+
+    client.write(dodgy ? "REJECT" : "DUNNO")
+    client.write("\n")
+
+    client.write("\n")
+    client.close
+  end
+end

@@ -2,6 +2,8 @@
 
 $0='postfix-policy-whois'
 
+PORT = 8787
+
 require 'syslog'
 
 $LOG = Syslog.open($0, Syslog::LOG_PID | Syslog::LOG_PERROR, Syslog::LOG_MAIL)
@@ -44,8 +46,8 @@ def dodgy?(domain)
 end
 
 require 'socket'
-server = TCPServer.new("0.0.0.0", 8787)
-$LOG.log(Syslog::LOG_INFO, "Listening on 0.0.0.0:8787")
+server = TCPServer.new("0.0.0.0", PORT)
+$LOG.log(Syslog::LOG_INFO, "Listening on 0.0.0.0:{PORT}")
 
 while true
   Thread.new(server.accept) do |client|

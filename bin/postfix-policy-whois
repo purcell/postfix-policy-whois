@@ -19,7 +19,7 @@ end
 
 def dodgy_dns?(domain)
   if ns = nameserver_for(domain)
-    return domain if ns[".monikerdns.net"]
+    return domain if (ns[".monikerdns.net"] || ns[".name-services.com"])
   else
     parent_domain = domain.scan(/\.(.*)/).flatten.first
     if parent_domain && parent_domain =~ /\./
@@ -30,7 +30,7 @@ end
 
 def dodgy_whois?(domain)
   ## TODO: throttle requests
-  return Whois.whois(domain).match?(/monikerprivacy/)
+  return Whois.whois(domain).match?(/monikerprivacy|whoisprivacyprotect\.com/)
 end
 
 def dodgy?(domain)

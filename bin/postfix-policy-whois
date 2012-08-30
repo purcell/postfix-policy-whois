@@ -2,12 +2,14 @@
 
 $0='postfix-policy-registrar'
 
-require 'net/dns'
+require 'resolv'
 require 'whois'
 
 def nameserver_for(domain)
-  if answer = Net::DNS::Resolver.start(domain, Net::DNS::NS).answer.first
-    answer.nsdname.sub(/\.$/, '')
+  begin
+    Resolv::DNS.new.getresource(domain, Resolv::DNS::Resource::IN::NS).name.to_s
+  rescue Resolv::ResolvError
+    nil
   end
 end
 

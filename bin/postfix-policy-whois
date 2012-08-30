@@ -59,8 +59,7 @@ while true
       puts "Rejecting mail due to registrar: #{sender}"
     end
 
-    client.write(dodgy ? "REJECT" : "DUNNO")
-    client.write("\n")
+    client.write("action=" + (dodgy ? "REJECT" : "DUNNO") + "\n")
 
     client.write("\n")
     client.close

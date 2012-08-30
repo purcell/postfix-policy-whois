@@ -2,6 +2,10 @@
 
 $0='postfix-policy-whois'
 
+require 'syslog'
+
+$LOG = Syslog.open($0, Syslog::LOG_PID | Syslog::LOG_PERROR, Syslog::LOG_MAIL)
+
 require 'resolv'
 require 'whois'
 
@@ -30,18 +34,18 @@ def dodgy_whois?(domain)
 end
 
 def dodgy?(domain)
-  puts "Checking domain: #{domain}"
+  $LOG.log(Syslog::LOG_INFO, "Checking domain: #{domain}")
   if parent_domain = dodgy_dns?(domain)
-    puts "-> suspicious nameservers"
+    $LOG.log(Syslog::LOG_INFO, "Suspicious nameserver: #{parent_domain}")
     dodgy = dodgy_whois?(parent_domain)
-    puts "-> private registration" if dodgy
+    $LOG.log(Syslog::LOG_NOTICE, "Private registration: #{parent_domain}") if dodgy
     dodgy
   end
 end
 
 require 'socket'
 server = TCPServer.new("0.0.0.0", 8787)
-puts "Listening on 0.0.0.0:8787"
+$LOG.log(Syslog::LOG_INFO, "Listening on 0.0.0.0:8787")
 
 while true
   Thread.new(server.accept) do |client|
@@ -56,7 +60,7 @@ while true
     dodgy = sender && dodgy?(sender.scan(/@(.*)/).flatten.first.downcase)
 
     if dodgy
-      puts "Rejecting mail due to registrar: #{sender}"
+      $LOG.log(Syslog::LOG_NOTICE, "Rejecting mail due to registrar: #{sender}")
     end
 
     client.write("action=" + (dodgy ? "REJECT" : "DUNNO") + "\n")

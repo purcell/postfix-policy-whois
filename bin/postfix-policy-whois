@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-$0='postfix-policy-registrar'
+$0='postfix-policy-whois'
 
 require 'resolv'
 require 'whois'

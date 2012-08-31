@@ -7,13 +7,6 @@ PORT = 8787
 require 'syslog'
 
 $LOG = Syslog.open($0, Syslog::LOG_PID | Syslog::LOG_PERROR, Syslog::LOG_MAIL)
-class << $LOG
-  %w(info err notice debug warning crit alert).each do |level|
-    define_method level do |*args|
-      log(Syslog.const_get("LOG_#{level.upcase}"), *args)
-    end
-  end
-end
 
 require 'resolv'
 require 'whois'

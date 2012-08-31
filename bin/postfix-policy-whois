@@ -55,8 +55,8 @@ while true
     attr = Hash.new
     while rp = client.gets
       break if rp == "\n"
-      rp2 = rp.split(/=/)
-      attr[rp2[0]] = rp2[1].chomp
+      rp2 = rp.scan(/^(\w+)=(.*?)\s*$/).first
+      attr[rp2[0]] = rp2[1]
     end
 
     sender = attr["sender"]

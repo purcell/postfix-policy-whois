@@ -60,10 +60,16 @@ while true
     end
 
     sender = attr["sender"]
-    dodgy = sender && dodgy?(sender.scan(/@(.*)/).flatten.first.downcase)
+    dodgy = false
 
-    if dodgy
-      $LOG.log(Syslog::LOG_NOTICE, "Rejecting mail due to registrar: #{sender}")
+    begin
+      $LOG.log(Syslog::LOG_INFO, "Checking sender: #{sender}")
+      dodgy = dodgy?(sender.scan(/@(.*)/).flatten.first.downcase)
+      if dodgy
+        $LOG.log(Syslog::LOG_NOTICE, "Rejecting mail due to registrar: #{sender}")
+      end
+    rescue
+      $LOG.log(Syslog::LOG_ERR, "Error checking registrar: #{$!}")
     end
 
     client.write("action=" + (dodgy ? "REJECT" : "DUNNO") + "\n")

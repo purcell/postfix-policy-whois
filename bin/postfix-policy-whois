@@ -47,7 +47,7 @@ end
 
 require 'socket'
 server = TCPServer.new("0.0.0.0", PORT)
-$LOG.log(Syslog::LOG_INFO, "Listening on 0.0.0.0:{PORT}")
+$LOG.log(Syslog::LOG_INFO, "Listening on 0.0.0.0:#{PORT}")
 
 while true
   Thread.new(server.accept) do |client|

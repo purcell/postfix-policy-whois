@@ -51,6 +51,7 @@ $LOG.log(Syslog::LOG_INFO, "Listening on 0.0.0.0:#{PORT}")
 
 while true
   Thread.new(server.accept) do |client|
+    $LOG.log(Syslog::LOG_DEBUG, "Got connection")
     attr = Hash.new
     while rp = client.gets
       break if rp == "\n"

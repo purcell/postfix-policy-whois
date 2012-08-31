@@ -56,30 +56,35 @@ require 'socket'
 server = TCPServer.new("0.0.0.0", PORT)
 $LOG.info("Listening on 0.0.0.0:#{PORT}")
 
+def reject?(policy_input)
+  sender = policy_input["sender"]
+  unless sender
+    $LOG.info("No sender provided")
+    return false
+  end
+
+  begin
+    $LOG.info("Checking sender: #{sender}")
+    if dodgy?(sender.scan(/@(.*)/).flatten.first.downcase)
+      $LOG.notice("Rejecting mail due to registrar: #{sender}")
+      return true
+    end
+  rescue
+    $LOG.err("Error checking registrar: #{$!}")
+    return false
+  end
+end
+
 while true
   Thread.new(server.accept) do |client|
     $LOG.debug("Got connection")
     attr = Hash.new
-    while rp = client.gets
-      break if rp == "\n"
-      rp2 = rp.scan(/^(\w+)=(.*?)\s*$/).first
-      attr[rp2[0]] = rp2[1]
+    while line = client.gets
+      break if line == "\n"
+      k, v = line.scan(/^(\w+)=(.+?)\s*$/).first
+      attr[k] = v if k
     end
-
-    sender = attr["sender"]
-    dodgy = false
-
-    begin
-      $LOG.info("Checking sender: #{sender}")
-      dodgy = dodgy?(sender.scan(/@(.*)/).flatten.first.downcase)
-      if dodgy
-        $LOG.notice("Rejecting mail due to registrar: #{sender}")
-      end
-    rescue
-      $LOG.err("Error checking registrar: #{$!}")
-    end
-
-    client.write("action=" + (dodgy ? "REJECT" : "DUNNO") + "\n")
+    client.write("action=" + (reject?(attr) ? "REJECT" : "DUNNO") + "\n")
 
     client.write("\n")
     client.close

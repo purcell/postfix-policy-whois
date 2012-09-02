@@ -4,12 +4,19 @@ $0='postfix-policy-whois'
 
 PORT = 8787
 
+BLACKLIST = {
+  # nickrayrutter.com, sleepsiesta.com
+  /\.monikerdns\.net/i => { "whois.moniker.com" => /monikerprivacy/i },
+  /\.name-services\.com/i => { "whois.enom.com" => /whoisprivacyprotect\.com/i },
+  # Namecheap
+  /\.registrar-servers\.com/i => { "whois.namecheap.com" => /whoisguard\.com/i}
+}
+
 require 'syslog'
 
 $LOG = Syslog.open($0, Syslog::LOG_PID | Syslog::LOG_PERROR, Syslog::LOG_MAIL)
 
 require 'resolv'
-require 'whois'
 
 def nameserver_for(domain)
   begin
@@ -19,9 +26,23 @@ def nameserver_for(domain)
   end
 end
 
+require 'socket'
+require 'timeout'
+
+def whois(server, domain)
+  Timeout::timeout(5) do
+    TCPSocket.open(server, 43) do |sock|
+      sock.write("#{domain}\r\n")
+      return sock.read
+    end
+  end
+end
+
 def dodgy_dns?(domain)
   if ns = nameserver_for(domain)
-    return domain if (ns[".monikerdns.net"] || ns[".name-services.com"] || ns[".registrar-servers.com"])
+    BLACKLIST.each do |nsmatcher, whois_rules|
+      return domain, whois_rules if nsmatcher =~ ns
+    end
   else
     parent_domain = domain.scan(/\.(.*)/).flatten.first
     if parent_domain && parent_domain =~ /\./
@@ -30,16 +51,20 @@ def dodgy_dns?(domain)
   end
 end
 
-def dodgy_whois?(domain)
+def dodgy_whois?(domain, whois_rules)
   ## TODO: throttle requests
-  return Whois.whois(domain).match?(/monikerprivacy|whoisprivacyprotect\.com|whoisguard\.com/)
+  whois_rules.each do |server, privacymatcher|
+    $LOG.info("Checking whois for #{domain} using #{server}")
+    return true if privacymatcher =~ whois(server, domain)
+  end
 end
 
 def dodgy?(domain)
   $LOG.info("Checking domain: #{domain}")
-  if parent_domain = dodgy_dns?(domain)
+  parent_domain, whois_rules = dodgy_dns?(domain)
+  if parent_domain
     $LOG.info("Suspicious nameserver: #{parent_domain}")
-    dodgy = dodgy_whois?(parent_domain)
+    dodgy = dodgy_whois?(parent_domain, whois_rules)
     $LOG.notice("Private registration: #{parent_domain}") if dodgy
     dodgy
   end
@@ -58,7 +83,8 @@ def reject?(policy_input)
 
   begin
     $LOG.info("Checking sender: #{sender}")
-    if dodgy?(sender.scan(/@(.*)/).flatten.first.downcase)
+    domain = sender.scan(/@(.*)/).flatten.first.downcase
+    if dodgy?(domain)
       $LOG.notice("Rejecting mail due to registrar: #{sender}")
       return true
     end

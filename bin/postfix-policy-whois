@@ -40,9 +40,10 @@ end
 
 def dodgy_dns?(domain)
   if ns = nameserver_for(domain)
-    BLACKLIST.each do |nsmatcher, whois_rules|
-      return domain, whois_rules if nsmatcher =~ ns
+    _, whois_rules = BLACKLIST.find do |nsmatcher, whois_rules|
+      nsmatcher =~ ns
     end
+    return [domain, whois_rules] if whois_rules
   else
     parent_domain = domain.scan(/\.(.*)/).flatten.first
     if parent_domain && parent_domain =~ /\./

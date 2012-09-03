@@ -43,7 +43,7 @@ def dodgy_dns?(domain)
     _, whois_rules = BLACKLIST.find do |nsmatcher, whois_rules|
       nsmatcher =~ ns
     end
-    return [domain, whois_rules] if whois_rules
+    return [domain, ns, whois_rules] if whois_rules
   else
     parent_domain = domain.scan(/\.(.*)/).flatten.first
     if parent_domain && parent_domain =~ /\./
@@ -62,9 +62,9 @@ end
 
 def dodgy?(domain)
   $LOG.info("Checking domain: #{domain}")
-  parent_domain, whois_rules = dodgy_dns?(domain)
+  parent_domain, nameserver, whois_rules = dodgy_dns?(domain)
   if parent_domain
-    $LOG.info("Suspicious nameserver: #{parent_domain}")
+    $LOG.info("Suspicious nameserver: #{nameserver}")
     dodgy = dodgy_whois?(parent_domain, whois_rules)
     $LOG.notice("Private registration: #{parent_domain}") if dodgy
     dodgy

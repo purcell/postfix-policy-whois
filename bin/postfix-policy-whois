@@ -2,7 +2,7 @@
 
 $0='postfix-policy-whois'
 
-PORT = 8787
+PORT = ARGV.any? ? ARGV.first.to_i : 8787
 
 BLACKLIST = {
   # nickrayrutter.com, sleepsiesta.com

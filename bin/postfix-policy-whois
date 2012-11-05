@@ -1,35 +1,63 @@
 #!/usr/bin/env ruby
 
-$0='postfix-policy-whois'
+WHOIS_BLACKLIST = [
+  /monikerprivacy/i,
+  /whoisprivacyprotect\.com/i,
+  /whoisguard\.com/i
+]
 
-PORT = ARGV.any? ? ARGV.first.to_i : 8787
-
-BLACKLIST = {
-  # nickrayrutter.com, sleepsiesta.com
-  /\.monikerdns\.net/i => { "whois.moniker.com" => /monikerprivacy/i },
-  /\.name-services\.com/i => { "whois.enom.com" => /whoisprivacyprotect\.com/i },
-  # Namecheap
-  /\.registrar-servers\.com/i => { "whois.namecheap.com" => /whoisguard\.com/i}
+DNS_TO_WHOIS_CHECKLIST = {
+  /\.monikerdns\.net$/i => "whois.moniker.com",
+  /\.name-services\.com$/i => "whois.enom.com",
+  /\.registrar-servers\.com$/i => "whois.namecheap.com"
 }
 
-require 'syslog'
 
+##############################################################################
+# Start-up
+##############################################################################
+
+$0='postfix-policy-whois'
+
+require 'syslog'
 $LOG = Syslog.open($0, Syslog::LOG_PID | Syslog::LOG_PERROR, Syslog::LOG_MAIL)
 
+##############################################################################
+# DNS
+##############################################################################
+
+require 'timeout'
 require 'resolv'
 
 def nameserver_for(domain)
-  begin
-    Resolv::DNS.new.getresource(domain, Resolv::DNS::Resource::IN::NS).name.to_s
-  rescue Resolv::ResolvError
-    nil
+  Timeout::timeout(5) do
+    begin
+      Resolv::DNS.new.getresource(domain, Resolv::DNS::Resource::IN::ANY).name.to_s
+    rescue Resolv::ResolvError
+      nil
+    end
   end
 end
 
-require 'socket'
-require 'timeout'
+def tld_and_nameserver(domain)
+  if ns = nameserver_for(domain)
+    [domain, ns]
+  else
+    parent_domain = domain.scan(/\.(.*)/).flatten.first
+    if parent_domain && parent_domain =~ /\./
+      return tld_and_nameserver(parent_domain)
+    end
+  end
+end
 
-def whois(server, domain)
+##############################################################################
+# WHOIS
+##############################################################################
+
+require 'socket'
+
+def whois_via(server, domain)
+  $LOG.info("Checking whois for #{domain} using #{server}")
   Timeout::timeout(5) do
     TCPSocket.open(server, 43) do |sock|
       sock.write("#{domain}\r\n")
@@ -38,38 +66,45 @@ def whois(server, domain)
   end
 end
 
-def dodgy_dns?(domain)
-  if ns = nameserver_for(domain)
-    _, whois_rules = BLACKLIST.find do |nsmatcher, whois_rules|
-      nsmatcher =~ ns
-    end
-    return [domain, ns, whois_rules] if whois_rules
-  else
-    parent_domain = domain.scan(/\.(.*)/).flatten.first
-    if parent_domain && parent_domain =~ /\./
-      return dodgy_dns?(parent_domain)
-    end
+def whois(domain)
+  top_level_whois_server = domain.downcase.split(".").last + ".whois-servers.net"
+  response = whois_via(top_level_whois_server, domain)
+  if secondary_server = response.scan(/(?:Registrant Street1:)?Whois Server:\s*(\S+)/).flatten.first
+    response << whois_via(secondary_server, domain)
   end
+  response
 end
 
-def dodgy_whois?(domain, whois_rules)
-  ## TODO: throttle requests
-  whois_rules.each do |server, privacymatcher|
-    $LOG.info("Checking whois for #{domain} using #{server}")
-    return true if privacymatcher =~ whois(server, domain)
+##############################################################################
+# Domain checking logic
+##############################################################################
+
+def dodgy_whois?(domain, whois_info)
+  if WHOIS_BLACKLIST.find { |pattern| pattern === whois_info }
+    $LOG.info("Private registration: #{domain}")
+    true
   end
 end
 
 def dodgy?(domain)
   $LOG.info("Checking domain: #{domain}")
-  parent_domain, nameserver, whois_rules = dodgy_dns?(domain)
-  if parent_domain
-    $LOG.info("Suspicious nameserver: #{nameserver}")
-    dodgy = dodgy_whois?(parent_domain, whois_rules)
-    $LOG.notice("Private registration: #{parent_domain}") if dodgy
-    dodgy
+  tld, nameserver = tld_and_nameserver(domain)
+  $LOG.info("Nameserver for #{tld} is #{nameserver}")
+  if tld
+    _, whois_server = DNS_TO_WHOIS_CHECKLIST.find { |k, v| v if nameserver =~ k }
+    if whois_server
+      dodgy_whois?(tld, whois_via(whois_server, tld))
+    elsif nameserver.end_with?("." + tld)
+      dodgy_whois?(tld, whois(tld))
+    end
   end
 end
+
+##############################################################################
+# TCP server and postfix policy wiring
+##############################################################################
+
+PORT = ARGV.any? ? ARGV.first.to_i : 8787
 
 require 'socket'
 server = TCPServer.new("0.0.0.0", PORT)
@@ -91,6 +126,7 @@ def reject?(policy_input)
     end
   rescue
     $LOG.err("Error checking registrar: #{$!}")
+    $LOG.debug("Backtrace: #{$!.backtrace}")
     return false
   end
 end

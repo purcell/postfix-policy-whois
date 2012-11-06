@@ -112,8 +112,8 @@ end
 def dodgy?(domain)
   $LOG.info("Checking domain: #{domain}")
   tld, nameserver = tld_and_nameserver(domain)
-  $LOG.info("Nameserver for #{tld} is #{nameserver}")
   if tld
+    $LOG.info("Nameserver for #{tld} is #{nameserver}")
     _, whois_server = DNS_TO_WHOIS_CHECKLIST.find { |k, v| v if nameserver =~ k }
     if whois_server
       dodgy_whois?(tld, whois_via(whois_server, tld))

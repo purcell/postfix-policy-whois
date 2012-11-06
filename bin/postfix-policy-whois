@@ -34,7 +34,7 @@ require 'resolv'
 def nameserver_for(domain)
   Timeout::timeout(5) do
     begin
-      record = Resolv::DNS.new.getresource(domain, Resolv::DNS::Resource::IN::ANY)
+      record = Resolv::DNS.new.getresource(domain, Resolv::DNS::Resource::IN::NS)
       record.name.to_s if record.respond_to?(:name)
     rescue Resolv::ResolvError
       nil

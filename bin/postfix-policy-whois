@@ -72,6 +72,20 @@ def whois_via_raw(server, domain)
   end
 end
 
+def call_with_retries(n, delay)
+  remaining = n
+  while remaining >= 0
+    begin
+      return yield
+    rescue
+      raise $! if remaining == 0
+      $LOG.warning("Retrying (#{remaining} attempts remaining): #{$!}")
+      remaining -= 1
+      sleep delay * (2 ** (n - remaining))
+    end
+  end
+end
+
 require 'yaml/dbm'
 WHOIS_CACHE = YAML::DBM::open(DBFILE, 500, DBM::WRCREAT)
 at_exit { WHOIS_CACHE.close() }
@@ -83,7 +97,9 @@ def whois_via(server, domain)
     $LOG.debug("WHOIS cache hit for #{key.inspect}, created #{val[:created]}")
   else
     $LOG.debug("WHOIS cache miss for #{key.inspect}")
-    whois = whois_via_raw(server, domain)
+    whois = call_with_retries 1, 1 do
+      whois_via_raw(server, domain)
+    end
     WHOIS_CACHE[key] = val = {
       :whois => whois,
       :created => Time.now

@@ -9,7 +9,7 @@ WHOIS_BLACKLIST = [
 DNS_TO_WHOIS_CHECKLIST = {
   /\.monikerdns\.net$/i => "whois.moniker.com",
   /\.name-services\.com$/i => "whois.enom.com",
-  /\.registrar-servers\.com$/i => "whois.namecheap.com"
+  /\.registrar-servers\.com$/i => "whois.enom.com"
 }
 
 

@@ -189,3 +189,8 @@ while true
     client.close
   end
 end
+
+# Local Variables:
+# coding: utf-8
+# compile-command: "./postfix-policy-whois"
+# End:

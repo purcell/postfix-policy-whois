@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 WHOIS_BLACKLIST = [
+  /EXPIRED - PENDING DELETE/i,
   /monikerprivacy/i,
   /whoisprivacyprotect\.com/i,
   /whoisguard\.com/i

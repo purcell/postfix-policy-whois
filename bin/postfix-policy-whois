@@ -2,7 +2,7 @@
 
 WHOIS_BLACKLIST = [
   /EXPIRED - PENDING DELETE/i,
-  /ADDPERIOD/,
+  /ADDPERIOD/i,
   /monikerprivacy/i,
   /whoisprivacyprotect\.com/i,
   /whoisguard\.com/i

@@ -139,7 +139,7 @@ def dodgy?(domain)
     _, whois_server = DNS_TO_WHOIS_CHECKLIST.find { |k, v| v if nameserver =~ k }
     if whois_server
       dodgy_whois?(tld, whois_via(whois_server, tld))
-    elsif nameserver.end_with?("." + tld)
+    else
       dodgy_whois?(tld, whois(tld))
     end
   end

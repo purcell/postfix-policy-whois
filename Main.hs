@@ -9,9 +9,9 @@ import Network.DNS.Types (Domain)
 import qualified Data.ByteString.Char8 as B8 hiding (intersperse)
 import Data.List (intersperse)
 import Data.Maybe (catMaybes)
-import Network.Whois as Whois
+import qualified Network.Whois as Whois
 import Control.Applicative ((<$>))
-import Control.Monad.Error
+import Control.Monad.Except
 
 data Action = Reject | Dunno | Tempfail
             deriving Show
@@ -32,7 +32,7 @@ parentDomain d =
   where chopped = B8.concat $ intersperse (B8.pack ".") $ Prelude.drop 1 $ B8.split '.' d
 
 
-type Lookup = ErrorT String IO
+type Lookup = ExceptT String IO
 
 -- | Find the nameservers for the given domain, or a Left error if
 -- none are found.

@@ -11,7 +11,7 @@ import Data.List (intersperse)
 import Data.Maybe (catMaybes)
 import Network.Whois as Whois
 import Control.Applicative ((<$>))
-import Control.Monad.Trans.Error
+import Control.Monad.Error
 
 data Action = Reject | Dunno | Tempfail
             deriving Show
@@ -31,36 +31,36 @@ parentDomain d =
     _ -> Just chopped
   where chopped = B8.concat $ intersperse (B8.pack ".") $ Prelude.drop 1 $ B8.split '.' d
 
+
+type Lookup = ErrorT String IO
+
 -- | Find the nameservers for the given domain, or a Left error if
 -- none are found.
-nameserversFor :: Domain -> IO (Either String [Domain])
+nameserversFor :: Domain -> Lookup [Domain]
 nameserversFor d = do
-  seed <- makeResolvSeed defaultResolvConf
-  ns <- withResolver seed $ \r -> lookupNS r d
-  return $ case ns of
-    Left err   -> Left (show err)
-    Right []   -> Left "No nameservers found"
-    Right svrs -> Right svrs
-
-domainInfo :: Domain -> IO (Either String DomainInfo)
-domainInfo name = do
-  ns <- nameserversFor name
+  seed <- liftIO $ makeResolvSeed defaultResolvConf
+  ns <- liftIO $ withResolver seed $ \r -> lookupNS r d
   case ns of
-    Right n -> return $ Right (DomainInfo name n)
-    Left e -> let parent = parentDomain name in
-      case parent of
-        Just p -> domainInfo p
-        _ -> return $ Left e
+    Left err   -> throwError (show err)
+    Right []   -> throwError "No nameservers found"
+    Right svrs -> return svrs
+
+domainInfo :: Domain -> Lookup DomainInfo
+domainInfo name = (DomainInfo name <$> nameserversFor name)
+                  `catchError` \e ->
+                      case parentDomain name of
+                        Just p -> domainInfo p
+                        _ -> throwError e
 
 data WhoisInfo = WhoisInfo String
                deriving Show
 
-whoisForDomain :: Domain -> IO (Either String WhoisInfo)
+whoisForDomain :: Domain -> Lookup WhoisInfo
 whoisForDomain d = do
-    (primary, secondary) <- whoisLookup d
-    return $ case (primary, secondary) of
-      (Nothing, Nothing) -> Left "No whois info found"
-      _ -> Right $ WhoisInfo $ concat $ catMaybes [primary, secondary]
+    (primary, secondary) <- liftIO $ whoisLookup d
+    case (primary, secondary) of
+      (Nothing, Nothing) -> throwError "No whois info found"
+      _ -> return $ WhoisInfo $ concat $ catMaybes [primary, secondary]
   where
     whoisLookup = Whois.whois . B8.unpack . trimTrailingDot
     trimTrailingDot :: Domain -> Domain
@@ -69,7 +69,8 @@ whoisForDomain d = do
                          else bs
 
 
-
+whois :: String ->  Lookup WhoisInfo
+whois domain = domainInfo (B8.pack domain) >>= (whoisForDomain . dTLD)
 
 
 main :: IO ()

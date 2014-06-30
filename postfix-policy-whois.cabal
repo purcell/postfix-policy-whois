@@ -21,6 +21,13 @@ executable postfix-policy-whois
   GHC-Options:         -Wall
  -- other-modules:
   -- other-extensions:
-  build-depends:       base >=4.7 && <4.8, dns >=1.4 && <1.5, bytestring >=0.10 && <0.11, whois >=1.2 && <1.3, mtl >=2.2 && <2.3
+  build-depends:       network >= 2.5.0.0,
+                       containers >= 0.5.5.1,
+                       parsec >= 3.1.5,
+                       base >=4.7 && <4.8,
+                       dns >=1.4 && <1.5,
+                       bytestring >=0.10 && <0.11,
+                       whois >=1.2 && <1.3,
+                       mtl >=2.2 && <2.3
   hs-source-dirs:      src
   default-language:    Haskell2010

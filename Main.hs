@@ -57,10 +57,10 @@ data WhoisInfo = WhoisInfo String
 
 whoisForDomain :: Domain -> Lookup WhoisInfo
 whoisForDomain d = do
-    (primary, secondary) <- liftIO $ whoisLookup d
-    case (primary, secondary) of
-      (Nothing, Nothing) -> throwError "No whois info found"
-      _ -> return $ WhoisInfo $ concat $ catMaybes [primary, secondary]
+  (primary, secondary) <- liftIO $ whoisLookup d
+  case (primary, secondary) of
+    (Nothing, Nothing) -> throwError "No whois info found"
+    _ -> return $ WhoisInfo $ concat $ catMaybes [primary, secondary]
   where
     whoisLookup = Whois.whois . B8.unpack . trimTrailingDot
     trimTrailingDot :: Domain -> Domain

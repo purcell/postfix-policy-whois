@@ -39,11 +39,10 @@ type Lookup = ExceptT String IO
 nameserversFor :: Domain -> Lookup [Domain]
 nameserversFor d = do
   seed <- liftIO $ makeResolvSeed defaultResolvConf
-  ns <- liftIO $ withResolver seed $ \r -> lookupNS r d
-  case ns of
-    Left err   -> throwError (show err)
-    Right []   -> throwError "No nameservers found"
-    Right svrs -> return svrs
+  ns <- withExceptT show $ ExceptT $ withResolver seed $ \r -> lookupNS r d
+  if null ns
+  then throwError "No nameservers found"
+  else return ns
 
 domainInfo :: Domain -> Lookup DomainInfo
 domainInfo name = (DomainInfo name <$> nameserversFor name)

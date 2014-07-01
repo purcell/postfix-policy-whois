@@ -2,47 +2,63 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-
-TODO: IOExceptions
+TODO: IOExceptions, SIGPIPE
 -}
 module Main where
 
-import           Control.Applicative ((<*))
-import           Control.Exception   (bracket)
+import           Control.Applicative ((<$>), (<*))
+import           Control.Exception   (IOException, bracket, catch)
 import           Control.Monad       (forever)
 import qualified Data.Map.Strict     as Map
 import           Lookups
 import qualified Network
 import qualified Network.Socket      as Socket
-import           System.IO           (Handle, hClose, hGetLine)
+import           System.IO           (Handle, hClose, hGetLine, hPutStr)
 import           Text.Parsec.Char
 import           Text.Parsec.Error   (ParseError)
 import           Text.Parsec.Prim
 
-data Action = Reject | Dunno | Tempfail
-            deriving Show
-
-
 
 type PolicyInfo = Map.Map String String
 
-parsePolicyLine :: Stream s m Char => ParsecT s u m (String, String)
-parsePolicyLine = do
-  k <- many (alphaNum <|> char '_') <* char '='
-  v <- many (noneOf "\n") <* newline
-  return (k, v)
+data Action = Reject | Dunno | Tempfail
+            deriving Show
+
+-- | Policies take info about the incoming mail and return a decision
+-- about what, if anything, Postfix should do with it.
+type Policy = PolicyInfo -> IO Action
+
+
+
+many1 :: ParsecT s u m a -> ParsecT s u m [a]
+many1 p = do
+  x <- p
+  xs <- many p
+  return $ x:xs
 
 parsePolicyInfo :: Stream s m Char => ParsecT s u m PolicyInfo
-parsePolicyInfo = do
-  l <- parsePolicyLine
-  ls <- many parsePolicyLine
-  return $ Map.fromList (l:ls)
+parsePolicyInfo = Map.fromList <$> many1 policyLine
+  where
+    policyLine = do
+      k <- many1 (alphaNum <|> char '_') <* char '='
+      v <- many (noneOf "\n") <* newline
+      return (k, v)
 
 
 debugOut :: String -> IO ()
 debugOut = putStrLn
 
-serve :: Int -> IO ()
-serve port = Network.withSocketsDo $ bracket listen Socket.close (forever . accept)
+
+actionToResponse :: Action -> String
+actionToResponse a = "action=" ++ code ++ "\n\n"
+  where code = case a of
+                 Reject -> "reject"
+                 Dunno -> "dunno"
+                 Tempfail -> "tempfail"
+
+
+serve :: Int -> Policy -> IO ()
+serve port policy = Network.withSocketsDo $ bracket listen Socket.close (forever . accept)
   where
     listen = do
       s <- Network.listenOn $ Network.PortNumber $ fromIntegral port
@@ -51,13 +67,23 @@ serve port = Network.withSocketsDo $ bracket listen Socket.close (forever . acce
     accept sock = bracket (Network.accept sock) (\(h, _, _) -> hClose h) handler
     handler (handle, chost, cport) = do
       debugOut $ "Connection from " ++ chost ++ ":" ++ show cport
+      action <- readAndDecide handle `catch` logErrorAndReturn Dunno
+      debugOut $ "Policy decision: " ++ show action
+      hPutStr handle (actionToResponse action) `catch` logErrorAndReturn ()
+    logErrorAndReturn v e = do
+      debugOut $ "Error: " ++ show (e :: IOException)
+      return v
+    readAndDecide handle = do
       input <- readLinesUntilBlank handle
-      let info = parse parsePolicyInfo "" input in
-        print info
+      case parse parsePolicyInfo "" input of
+        Left err -> do
+          debugOut $ "Error parsing request: " ++ show err
+          return Dunno
+        Right req -> policy req
     readLinesUntilBlank :: Handle -> IO String
     readLinesUntilBlank h = acc ""
         where acc ls = do
-                line <- hGetLine h -- TODO: handle end of file
+                line <- hGetLine h
                 if null line
                 then return ls
                 else acc $ ls ++ line ++ "\n"

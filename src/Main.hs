@@ -57,6 +57,30 @@ actionToResponse a = "action=" ++ code ++ "\n\n"
                  Tempfail -> "tempfail"
 
 
+runHandle :: Handle -> Policy -> IO ()
+runHandle handle policy = do
+  action <- readAndDecide `catch` logErrorAndReturn Dunno
+  debugOut $ "Policy decision: " ++ show action
+  hPutStr handle (actionToResponse action) `catch` logErrorAndReturn ()
+  where
+    logErrorAndReturn v e = do
+      debugOut $ "Error: " ++ show (e :: IOException)
+      return v
+    readAndDecide = do
+      input <- readLinesUntilBlank
+      case parse parsePolicyInfo "" input of
+        Left err -> do
+          debugOut $ "Error parsing request: " ++ show err
+          return Dunno
+        Right req -> policy req
+    readLinesUntilBlank = acc ""
+        where acc ls = do
+                line <- hGetLine handle
+                if null line
+                then return ls
+                else acc $ ls ++ line ++ "\n"
+
+
 serve :: Int -> Policy -> IO ()
 serve port policy = Network.withSocketsDo $ bracket listen Socket.close (forever . accept)
   where
@@ -67,26 +91,7 @@ serve port policy = Network.withSocketsDo $ bracket listen Socket.close (forever
     accept sock = bracket (Network.accept sock) (\(h, _, _) -> hClose h) handler
     handler (handle, chost, cport) = do
       debugOut $ "Connection from " ++ chost ++ ":" ++ show cport
-      action <- readAndDecide handle `catch` logErrorAndReturn Dunno
-      debugOut $ "Policy decision: " ++ show action
-      hPutStr handle (actionToResponse action) `catch` logErrorAndReturn ()
-    logErrorAndReturn v e = do
-      debugOut $ "Error: " ++ show (e :: IOException)
-      return v
-    readAndDecide handle = do
-      input <- readLinesUntilBlank handle
-      case parse parsePolicyInfo "" input of
-        Left err -> do
-          debugOut $ "Error parsing request: " ++ show err
-          return Dunno
-        Right req -> policy req
-    readLinesUntilBlank :: Handle -> IO String
-    readLinesUntilBlank h = acc ""
-        where acc ls = do
-                line <- hGetLine h
-                if null line
-                then return ls
-                else acc $ ls ++ line ++ "\n"
+      runHandle handle policy
 
 
 main :: IO ()

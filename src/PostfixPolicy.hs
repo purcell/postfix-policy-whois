@@ -1,33 +1,66 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
 {-
-TODO: IOExceptions, SIGPIPE
--}
-module Main where
+TODO: SIGPIPE
+TODO: More response types, allow response string
+TODO: Policy info fields as a sum type
+TODO: Separate Types.hs
 
+http://www.postfix.org/SMTPD_POLICY_README.html
+
+-}
+module PostfixPolicy
+       ( Action(..)
+       , Decision(..)
+       , PolicyInfo
+       , Policy
+       , Logger
+       , runHandle
+       , serveTCP
+       )
+where
 import           Control.Applicative ((<$>), (<*))
 import           Control.Exception   (IOException, bracket, catch)
 import           Control.Monad       (forever)
 import qualified Data.Map.Strict     as Map
-import           Lookups
 import qualified Network
 import qualified Network.Socket      as Socket
 import           System.IO           (Handle, hClose, hGetLine, hPutStr)
 import           Text.Parsec.Char
-import           Text.Parsec.Error   (ParseError)
 import           Text.Parsec.Prim
+import           Text.Parsec.String  ()
 
 
+-- | A map of key/value pairs as described in
+-- http://www.postfix.org/SMTPD_POLICY_README.html
 type PolicyInfo = Map.Map String String
 
+-- | A response action for Postfix, as listed in
+-- http://www.postfix.org/access.5.html
+-- Only a subset of those are made available here.
 data Action = Reject | Dunno | Tempfail
-            deriving Show
+
+instance Show Action where
+  show Reject = "reject"
+  show Dunno = "dunno"
+  show Tempfail = "tempfail"
+
+data Decision = Decision Action
+              | DecisionWithMessage Action String
+
+instance Show Decision where
+  show (Decision a) = show a
+  show (DecisionWithMessage a s) = show a ++ " " ++ s
+
+inconclusive :: Decision
+inconclusive = Decision Dunno
+
 
 -- | Policies take info about the incoming mail and return a decision
 -- about what, if anything, Postfix should do with it.
-type Policy = PolicyInfo -> IO Action
+type Policy = PolicyInfo -> IO Decision
 
+type Logger = String -> IO ()
 
 
 many1 :: ParsecT s u m a -> ParsecT s u m [a]
@@ -45,32 +78,23 @@ parsePolicyInfo = Map.fromList <$> many1 policyLine
       return (k, v)
 
 
-type Logger = String -> IO ()
-
-
-actionToResponse :: Action -> String
-actionToResponse a = "action=" ++ code ++ "\n\n"
-  where code = case a of
-                 Reject -> "reject"
-                 Dunno -> "dunno"
-                 Tempfail -> "tempfail"
+decisionToResponse :: Decision -> String
+decisionToResponse d = "action=" ++ show d ++ "\n\n"
 
 
 runHandle :: Handle -> Logger -> Policy -> IO ()
 runHandle handle logger policy = do
-  action <- readAndDecide `catch` logErrorAndReturn Dunno
-  logger $ "Policy decision: " ++ show action
-  hPutStr handle (actionToResponse action) `catch` logErrorAndReturn ()
+  decision <- readAndDecide `catch` \e -> do logError e; return inconclusive
+  logger $ "Policy decision: " ++ show decision
+  hPutStr handle (decisionToResponse decision) `catch` logError
   where
-    logErrorAndReturn v e = do
-      logger $ "Error: " ++ show (e :: IOException)
-      return v
+    logError e = logger $ "Error: " ++ show (e :: IOException)
     readAndDecide = do
       input <- readLinesUntilBlank
       case parse parsePolicyInfo "" input of
         Left err -> do
           logger $ "Error parsing request: " ++ show err
-          return Dunno
+          return inconclusive
         Right req -> policy req
     readLinesUntilBlank = acc ""
         where acc ls = do
@@ -92,6 +116,3 @@ serveTCP port logger policy = Network.withSocketsDo $ bracket listen Socket.clos
       logger $ "Connection from " ++ chost ++ ":" ++ show cport
       runHandle handle logger policy
 
-
-main :: IO ()
-main = undefined

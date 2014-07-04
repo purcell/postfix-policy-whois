@@ -45,8 +45,7 @@ parsePolicyInfo = Map.fromList <$> many1 policyLine
       return (k, v)
 
 
-debugOut :: String -> IO ()
-debugOut = putStrLn
+type Logger = String -> IO ()
 
 
 actionToResponse :: Action -> String
@@ -57,20 +56,20 @@ actionToResponse a = "action=" ++ code ++ "\n\n"
                  Tempfail -> "tempfail"
 
 
-runHandle :: Handle -> Policy -> IO ()
-runHandle handle policy = do
+runHandle :: Handle -> Logger -> Policy -> IO ()
+runHandle handle logger policy = do
   action <- readAndDecide `catch` logErrorAndReturn Dunno
-  debugOut $ "Policy decision: " ++ show action
+  logger $ "Policy decision: " ++ show action
   hPutStr handle (actionToResponse action) `catch` logErrorAndReturn ()
   where
     logErrorAndReturn v e = do
-      debugOut $ "Error: " ++ show (e :: IOException)
+      logger $ "Error: " ++ show (e :: IOException)
       return v
     readAndDecide = do
       input <- readLinesUntilBlank
       case parse parsePolicyInfo "" input of
         Left err -> do
-          debugOut $ "Error parsing request: " ++ show err
+          logger $ "Error parsing request: " ++ show err
           return Dunno
         Right req -> policy req
     readLinesUntilBlank = acc ""
@@ -81,17 +80,17 @@ runHandle handle policy = do
                 else acc $ ls ++ line ++ "\n"
 
 
-serve :: Int -> Policy -> IO ()
-serve port policy = Network.withSocketsDo $ bracket listen Socket.close (forever . accept)
+serveTCP :: Int -> Logger -> Policy -> IO ()
+serveTCP port logger policy = Network.withSocketsDo $ bracket listen Socket.close (forever . accept)
   where
     listen = do
       s <- Network.listenOn $ Network.PortNumber $ fromIntegral port
-      debugOut $ "Listening on port " ++ show port
+      logger $ "Listening on port " ++ show port
       return s
     accept sock = bracket (Network.accept sock) (\(h, _, _) -> hClose h) handler
     handler (handle, chost, cport) = do
-      debugOut $ "Connection from " ++ chost ++ ":" ++ show cport
-      runHandle handle policy
+      logger $ "Connection from " ++ chost ++ ":" ++ show cport
+      runHandle handle logger policy
 
 
 main :: IO ()

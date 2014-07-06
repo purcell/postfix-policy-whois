@@ -21,7 +21,7 @@ module PostfixPolicy
 where
 import           Control.Applicative ((<$>), (<*))
 import           Control.Exception   (IOException, bracket, catch)
-import           Control.Monad       (forever)
+import           Control.Monad       (forever, liftM2)
 import qualified Data.Map.Strict     as Map
 import qualified Network
 import qualified Network.Socket      as Socket
@@ -64,10 +64,7 @@ type Logger = String -> IO ()
 
 
 many1 :: ParsecT s u m a -> ParsecT s u m [a]
-many1 p = do
-  x <- p
-  xs <- many p
-  return $ x:xs
+many1 p = liftM2 (:) p (many p)
 
 parsePolicyInfo :: Stream s m Char => ParsecT s u m PolicyInfo
 parsePolicyInfo = Map.fromList <$> many1 policyLine

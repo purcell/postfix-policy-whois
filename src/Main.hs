@@ -1,3 +1,10 @@
+{-
+TODO: unified logging
+TODO: timeouts on lookups
+TODO: cache lookups
+TODO: command line args
+TODO: keep patterns in a file
+-}
 module Main where
 import           Control.Applicative    ((*>))
 import           Control.Monad.Except
@@ -38,7 +45,6 @@ patterns = mapM compile [
             "whoisguard\\.com"
            ]
   where
-    compile :: String -> Either String PCRE.Regex
     compile s = PCRE.compileM (B8.pack s) [PCRE.caseless]
 
 
@@ -54,15 +60,17 @@ decideBasedOnWhois matchers (WhoisInfo info) =
 
 hardcodedPolicy :: [PCRE.Regex] -> Policy
 hardcodedPolicy matchers info = do
-  domain <- return . runIdentity $ runExceptT $ senderDomain info
-  case domain of
-    Left e -> bail e
-    Right d -> do
-      whoisInfo <- whois d
-      case whoisInfo of
-        Left e -> bail e
-        Right winfo -> decideBasedOnWhois matchers winfo
-  where bail e = do putStrLn e; return $ Decision Dunno
+  result <- runExceptT lookupAndDecide
+  case result of
+    Left e -> do
+      putStrLn e
+      return $ Decision Dunno
+    Right d -> return d
+  where
+    lookupAndDecide = do
+      domain <- mapExceptT (return . runIdentity) $ senderDomain info
+      winfo <- ExceptT $ whois domain
+      liftIO $ decideBasedOnWhois matchers winfo
 
 
 main :: IO ()

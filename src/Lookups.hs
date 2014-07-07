@@ -3,6 +3,7 @@
 module Lookups ( WhoisInfo(..)
                , whois
                , DomainInfo(..)
+               , Domain
                , domainInfo
                )
 where
@@ -69,5 +70,5 @@ whoisForDomain d = do
                          else bs
 
 
-whois :: String -> IO (Either String WhoisInfo)
-whois domain = runExceptT $ domainInfo (B8.pack domain) >>= (whoisForDomain . dTLD)
+whois :: Domain -> IO (Either String WhoisInfo)
+whois domain = runExceptT $ domainInfo domain >>= (whoisForDomain . dTLD)

@@ -14,6 +14,7 @@ module PostfixPolicy
        , Decision(..)
        , PolicyInfo
        , Policy
+       , inconclusive
        , Logger
        , runHandle
        , serveTCP

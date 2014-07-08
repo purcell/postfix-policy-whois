@@ -35,7 +35,7 @@ decideBasedOnWhois :: [PCRE.Regex] -> WhoisInfo -> IO Decision
 decideBasedOnWhois matchers (WhoisInfo info) =
   let binfo = B8.pack info in
   if null $ mapMaybe (\p -> PCRE.match p binfo []) matchers
-  then return $ Decision Dunno
+  then return inconclusive
   else do
     putStrLn "Rejecting based on pattern match"
     return $ Decision Reject
@@ -47,7 +47,7 @@ whoisBlacklistPolicy matchers info = do
   case result of
     Left e -> do
       putStrLn e
-      return $ Decision Dunno
+      return inconclusive
     Right d -> return d
   where
     lookupAndDecide = do

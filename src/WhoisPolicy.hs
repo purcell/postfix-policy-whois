@@ -31,26 +31,27 @@ senderDomain info = do
   domainFromEmail email
 
 
-decideBasedOnWhois :: [PCRE.Regex] -> WhoisInfo -> IO Decision
-decideBasedOnWhois matchers (WhoisInfo info) =
+decideBasedOnWhois :: [PCRE.Regex] -> Logger -> WhoisInfo -> IO Decision
+decideBasedOnWhois matchers logger (WhoisInfo info) =
   let binfo = B8.pack info in
   if null $ mapMaybe (\p -> PCRE.match p binfo []) matchers
   then return inconclusive
   else do
-    putStrLn "Rejecting based on pattern match"
+    logger "Rejecting based on pattern match"
     return $ Decision Reject
 
 
-whoisBlacklistPolicy :: [PCRE.Regex] -> Policy
-whoisBlacklistPolicy matchers info = do
+whoisBlacklistPolicy :: [PCRE.Regex] -> Logger -> Policy
+whoisBlacklistPolicy matchers logger info = do
   result <- runExceptT lookupAndDecide
   case result of
     Left e -> do
-      putStrLn e
+      logger e
       return inconclusive
     Right d -> return d
   where
     lookupAndDecide = do
       domain <- mapExceptT (return . runIdentity) $ senderDomain info
+      liftIO . logger $ "Looking up whois for " ++ B8.unpack domain
       winfo <- ExceptT $ whois domain
-      liftIO $ decideBasedOnWhois matchers winfo
+      liftIO $ decideBasedOnWhois matchers logger winfo

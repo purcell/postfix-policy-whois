@@ -9,8 +9,11 @@ module Main where
 import qualified Data.ByteString.Char8 as B8
 import           PostfixPolicy
 import           System.Environment    (getArgs)
+import           System.Posix.Syslog
 import qualified Text.Regex.PCRE.Light as PCRE
 import           WhoisPolicy
+
+
 
 patterns :: Either String [PCRE.Regex]
 patterns = mapM compile [
@@ -26,6 +29,7 @@ patterns = mapM compile [
 main :: IO ()
 main = do
   [port] <- getArgs
-  case patterns of
-    Left e -> putStrLn e
-    Right ps -> serveTCP (read port :: Int) putStrLn (whoisBlacklistPolicy ps)
+  withSyslog "policy-whois" [PID, PERROR] MAIL $
+    case patterns of
+      Left e -> syslog Error e
+      Right ps -> serveTCP (read port :: Int) (syslog Info) (whoisBlacklistPolicy ps (syslog Info))

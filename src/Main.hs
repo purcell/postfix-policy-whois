@@ -42,7 +42,7 @@ patterns = mapM compile [
             "ADDPERIOD",
             "monikerprivacy",
             "whoisprivacyprotect\\.com",
-            "whoisguard\\.com"
+            "whoisguard"
            ]
   where
     compile s = PCRE.compileM (B8.pack s) [PCRE.caseless]

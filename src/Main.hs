@@ -1,6 +1,6 @@
 {-
 TODO: unified logging
-TODO: timeouts on lookups
+TODO: timeouts on lookups with System.Timeout.timeout
 TODO: cache lookups
 TODO: command line args
 TODO: keep patterns in a file

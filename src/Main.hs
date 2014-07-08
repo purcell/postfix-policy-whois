@@ -58,8 +58,8 @@ decideBasedOnWhois matchers (WhoisInfo info) =
     return $ Decision Reject
 
 
-hardcodedPolicy :: [PCRE.Regex] -> Policy
-hardcodedPolicy matchers info = do
+blacklistPolicy :: [PCRE.Regex] -> Policy
+blacklistPolicy matchers info = do
   result <- runExceptT lookupAndDecide
   case result of
     Left e -> do
@@ -78,4 +78,4 @@ main = do
   [port] <- getArgs
   case patterns of
     Left e -> putStrLn e
-    Right ps -> serveTCP (read port :: Int) putStrLn (hardcodedPolicy ps)
+    Right ps -> serveTCP (read port :: Int) putStrLn (blacklistPolicy ps)

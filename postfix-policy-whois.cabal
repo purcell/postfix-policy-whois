@@ -18,7 +18,7 @@ cabal-version:       >=1.10
 
 executable postfix-policy-whois
   main-is:             Main.hs
-  GHC-Options:         -Wall
+  GHC-Options:         -Wall -fwarn-incomplete-uni-patterns
  -- other-modules:
   -- other-extensions:
   build-depends:       network >= 2.5.0.0,

@@ -1,6 +1,7 @@
 -- | Network lookups
 
 module Lookups ( WhoisInfo(..)
+               , WhoisLookup
                , whois
                , DomainInfo(..)
                , Domain
@@ -70,5 +71,7 @@ whoisForDomain d = do
                          else bs
 
 
-whois :: Domain -> IO (Either String WhoisInfo)
+type WhoisLookup = Domain -> IO (Either String WhoisInfo)
+
+whois :: WhoisLookup
 whois domain = runExceptT $ domainInfo domain >>= (whoisForDomain . dTLD)

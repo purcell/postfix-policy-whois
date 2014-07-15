@@ -41,8 +41,8 @@ decideBasedOnWhois matchers logger (WhoisInfo info) =
     return $ Decision Reject
 
 
-whoisBlacklistPolicy :: [PCRE.Regex] -> Logger -> Policy
-whoisBlacklistPolicy matchers logger info = do
+whoisBlacklistPolicy :: [PCRE.Regex] -> Logger -> WhoisLookup -> Policy
+whoisBlacklistPolicy matchers logger whoislookup info = do
   result <- runExceptT lookupAndDecide
   case result of
     Left e -> do
@@ -53,5 +53,5 @@ whoisBlacklistPolicy matchers logger info = do
     lookupAndDecide = do
       domain <- mapExceptT (return . runIdentity) $ senderDomain info
       liftIO . logger $ "Looking up whois for " ++ B8.unpack domain
-      winfo <- ExceptT $ whois domain
+      winfo <- ExceptT $ whoislookup domain
       liftIO $ decideBasedOnWhois matchers logger winfo

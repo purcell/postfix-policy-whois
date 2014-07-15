@@ -6,12 +6,14 @@ TODO: keep patterns in a file
 -}
 module Main where
 import           Cache
-import qualified Data.ByteString.Char8 as B8
+import           Control.Applicative        ((<$>))
+import qualified Data.ByteString.Char8      as B8
+import qualified Data.ByteString.Lazy.Char8 as BL8
 import           Lookups
 import           PostfixPolicy
-import           System.Environment    (getArgs)
+import           System.Environment         (getArgs)
 import           System.Posix.Syslog
-import qualified Text.Regex.PCRE.Light as PCRE
+import qualified Text.Regex.PCRE.Light      as PCRE
 import           WhoisPolicy
 
 
@@ -30,12 +32,12 @@ patterns = mapM compile [
 
 cachedWhoisLookup :: FilePath -> WhoisLookup
 cachedWhoisLookup cacheDir domain = do
-  dircache <- stringDirectoryCache cacheDir
+  dircache <- wrapGzip <$> bytestringDirectoryCache cacheDir
   withCache dircache unwrap wrap (whois . B8.pack) (B8.unpack domain)
   where
-    unwrap (Right (WhoisInfo s)) = Just s
+    unwrap (Right (WhoisInfo s)) = Just $ BL8.pack s
     unwrap _ = Nothing
-    wrap s = Right $ WhoisInfo s
+    wrap s = Right $ WhoisInfo $ BL8.unpack s
 
 
 main :: IO ()

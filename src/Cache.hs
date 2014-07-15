@@ -2,14 +2,19 @@
 module Cache
        ( Cache(..)
        , withCache
-       , stringDirectoryCache
+       , bytestringDirectoryCache
+       , wrapGzip
        )
 where
-import           Control.Applicative ((<$>))
-import           Network.URI         (escapeURIString)
-import           System.Directory    (doesFileExist)
+import           Codec.Compression.Zlib.Internal (compress, decompress,
+                                                  defaultCompressParams,
+                                                  defaultDecompressParams,
+                                                  gzipFormat)
+import           Control.Applicative             ((<$>))
+import qualified Data.ByteString.Lazy.Char8      as BL8
+import           Network.URI                     (escapeURIString)
+import           System.Directory                (doesFileExist)
 import           System.FilePath
-
 
 
 data Cache a b = Cache { cWrite :: a -> b -> IO ()
@@ -30,14 +35,25 @@ withCache cache unwrap wrap f key = do
       return result
 
 
-stringDirectoryCache :: FilePath -> IO (Cache String String)
-stringDirectoryCache cacheDir = return $ Cache writer reader
+wrapGzip :: Cache String BL8.ByteString -> Cache String BL8.ByteString
+wrapGzip underlying = Cache wrapWriter wrapReader
   where
-    writer key = writeFile (cacheFilename key)
+    wrapWriter k v = cWrite underlying k (squish v)
+    squish = compress gzipFormat defaultCompressParams
+    wrapReader k = do
+      result <- cRead underlying k
+      return $ unsquish <$> result
+    unsquish = decompress gzipFormat defaultDecompressParams
+
+
+bytestringDirectoryCache :: FilePath -> IO (Cache String BL8.ByteString)
+bytestringDirectoryCache cacheDir = return $ Cache writer reader
+  where
+    writer key = BL8.writeFile (cacheFilename key)
     reader key = do
       haveCache <- doesFileExist (cacheFilename key)
       if haveCache
-        then Just <$> readFile (cacheFilename key)
+        then Just <$> BL8.readFile (cacheFilename key)
         else return Nothing
     cacheFilename key = cacheDir </> escapeKey key
     escapeKey = escapeURIString ('/' /=)

@@ -12,8 +12,11 @@ import           Codec.Compression.Zlib.Internal (compress, decompress,
                                                   gzipFormat)
 import           Control.Applicative             ((<$>))
 import qualified Data.ByteString.Lazy.Char8      as BL8
+import           Data.Hashable
 import           Network.URI                     (escapeURIString)
-import           System.Directory                (doesFileExist)
+import           Numeric                         (showHex)
+import           System.Directory                (createDirectoryIfMissing,
+                                                  doesFileExist)
 import           System.FilePath
 
 
@@ -49,12 +52,16 @@ wrapGzip underlying = Cache wrapWriter wrapReader
 bytestringDirectoryCache :: FilePath -> IO (Cache String BL8.ByteString)
 bytestringDirectoryCache cacheDir = return $ Cache writer reader
   where
-    writer key = BL8.writeFile (cacheFilename key)
+    writer key val = do
+      createDirectoryIfMissing True $ takeDirectory fn
+      BL8.writeFile fn val
+      where fn = cacheFilename key
     reader key = do
       haveCache <- doesFileExist (cacheFilename key)
       if haveCache
         then Just <$> BL8.readFile (cacheFilename key)
         else return Nothing
-    cacheFilename key = cacheDir </> escapeKey key
+    cacheFilename key = cacheDir </> hashPrefix key </> escapeKey key
     escapeKey = escapeURIString ('/' /=)
-
+    hashPrefix key = take 2 hex </> take 4 hex
+      where hex = showHex (hash key) ""
